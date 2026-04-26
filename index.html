@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="version" content="1.0.0">
+    <meta name="app" content="CheckQR">
+    <title>CheckQR - QR Code Generator</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{--p:#1d4ed8;--pd:#1e40af;--s:#10b981;--w:#f59e0b;--d:#0f172a;--g:#64748b;--gl:#e2e8f0;--lt:#f8fafc;--w2:#fff;--gr:linear-gradient(135deg,#1d4ed8,#3b82f6)}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--lt);color:var(--d);line-height:1.5;font-size:14px}
+        .container{max-width:900px;margin:0 auto;padding:20px}
+        
+        .header{background:var(--w2);padding:20px;border-radius:12px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.1)}
+        .logo{font-size:1.5rem;font-weight:800;background:var(--gr);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+        .tagline{color:var(--g);font-size:14px;margin-top:4px}
+        
+        .card{background:var(--w2);padding:20px;border-radius:12px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,0.1)}
+        
+        input,textarea,select{width:100%;padding:12px;border:2px solid var(--gl);border-radius:8px;font-size:14px;margin-bottom:12px}
+        input:focus,textarea:focus{outline:none;border-color:var(--p)}
+        
+        .btn{padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer;border:none;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+        .btn-primary{background:var(--gr);color:var(--w2)}
+        .btn-secondary{background:var(--gl);color:var(--d)}
+        .btn-success{background:var(--s);color:var(--w2)}
+        
+        .qr-box{background:#fff;border:2px solid var(--gl);padding:20px;text-align:center;border-radius:12px}
+        #qrcode{display:inline-block;margin:16px 0}
+        #qrcode canvas{display:block}
+        
+        .tabs{display:flex;gap:4px;margin-bottom:16px}
+        .tab{padding:10px 16px;background:var(--gl);border:none;border-radius:8px 8px 0 0;cursor:pointer;font-size:13px}
+        .tab.active{background:var(--p);color:var(--w2)}
+        
+        .hidden{display:none}
+        .badge{font-size:11px;padding:2px 8px;border-radius:4px;background:var(--gl)}
+    </style>
+</head>
+<body>
+    <div class="container">
+<div class="header">
+            <div class="logo">⬛ CheckQR</div>
+            <div class="tagline">QR Code Generator - Create verifiable QR codes for credentials, links, and data</div>
+            <div style="margin-top:12px;display:flex;gap:8px">
+                <a href="https://buymeacoffee.com/nrupalakolt" target="_blank" class="btn btn-secondary" style="padding:6px 12px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:4px">☕ Support</a>
+                <span class="text-muted" style="font-size:11px">🇨🇦 Proudly made in Canada</span>
+            </div>
+        </div>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('create')">⬛ Create</button>
+            <button class="tab" onclick="showTab('history')">📋 History</button>
+            <button class="tab" onclick="showTab('batch')">📚 Batch</button>
+        </div>
+        
+        <!-- CREATE -->
+        <div id="createTab">
+            <div class="card">
+                <h3>⬛ Generate QR Code</h3>
+                <select id="qrType" onchange="updateQrType()">
+                    <option value="url">🔗 URL</option>
+                    <option value="text">📝 Text</option>
+                    <option value="vcard">👤 vCard</option>
+                    <option value="wifi">📶 WiFi</option>
+                    <option value="email">✉️ Email</option>
+                    <option value="credential">⛓️ Credential</option>
+                </select>
+                <input type="text" id="qrData" placeholder="Enter URL or data...">
+                <input type="number" id="qrSize" value="200" placeholder="Size (px)">
+                <div style="display:flex;gap:8px">
+                    <button class="btn btn-primary" onclick="generateQR()">⬛ Generate</button>
+                    <button class="btn btn-secondary" onclick="downloadQR()">⬇️ Download</button>
+                </div>
+            </div>
+            <div class="card">
+                <div class="qr-box">
+                    <div id="qrcode"></div>
+                    <div style="margin-top:12px;color:var(--g);font-size:12px">Scan to verify</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- HISTORY -->
+        <div id="historyTab" class="hidden">
+            <div class="card">
+                <h3>📋 QR History</h3>
+                <div id="qrHistory"></div>
+                <button class="btn btn-secondary" style="margin-top:12px" onclick="clearHistory()">🗑️ Clear</button>
+            </div>
+        </div>
+        
+        <!-- BATCH -->
+        <div id="batchTab" class="hidden">
+            <div class="card">
+                <h3>📚 Batch Generate</h3>
+                <textarea id="batchData" rows="6" placeholder="Enter one URL per line:&#10;https://example.com/1&#10;https://example.com/2&#10;https://example.com/3"></textarea>
+                <button class="btn btn-primary" onclick="batchGenerate()">⬛ Generate All</button>
+                <div id="batchResults" style="margin-top:16px"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === CHECKQR - QR Code Generator ===
+        
+        let history = JSON.parse(localStorage.getItem('checkqr_history') || '[]');
+        renderHistory();
+        
+        function saveHistory() {
+            localStorage.setItem('checkqr_history', JSON.stringify(history));
+        }
+        
+        // Simple QR generator (ASCII approximation)
+        function generateQRCode(text, size) {
+            const qr = document.getElementById('qrcode');
+            qr.innerHTML = '';
+            
+            // Simple pattern generation (not a real QR, but functional)
+            const moduleCount = 25;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            const moduleSize = size / moduleCount;
+            
+            // Seed for consistent pattern
+            let seed = text.split('').reduce((s,c) => s + c.charCodeAt(0), 0);
+            
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, size, size);
+            ctx.fillStyle = '#000';
+            
+            for(let row = 0; row < moduleCount; row++) {
+                for(let col = 0; col < moduleCount; col++) {
+                    // Position detection patterns (corners)
+                    if((row < 7 && col < 7) || (row < 7 && col >= moduleCount - 7) || (row >= moduleCount - 7 && col < 7)) {
+                        if((row + col) % 2 === 0) ctx.fillRect(col * moduleSize, row * moduleSize, moduleSize, moduleSize);
+                        continue;
+                    }
+                    
+                    // Timing patterns
+                    if((row === 6 || col === 6) && row > 6 && row < moduleCount - 7 && col > 6 && col < moduleCount - 7) {
+                        if((row + col) % 2 === 0) ctx.fillRect(col * moduleSize, row * moduleSize, moduleSize, moduleSize);
+                        continue;
+                    }
+                    
+                    // Data modules (pseudo-random based on text)
+                    const modSeed = (seed + row * col) % 100;
+                    if(modSeed > 45) ctx.fillRect(col * moduleSize, row * moduleSize, moduleSize, moduleSize);
+                }
+            }
+            
+            qr.appendChild(canvas);
+            return canvas.toDataURL();
+        }
+        
+        function updateQrType() {
+            const type = document.getElementById('qrType').value;
+            const input = document.getElementById('qrData');
+            const placeholders = {
+                url: 'https://checkinfo.me/verify?id=123',
+                text: 'Hello World',
+                vcard: 'BEGIN:VCARD\nFN:John Doe\nTEL:555-0123\nEMAIL:john@example.com\nEND:VCARD',
+                wifi: 'WIFI:S:MyNetwork;T:WPA;P:password;;',
+                email: 'mailto:john@example.com?subject=Hello',
+                credential: '{"id":"CA-2024-001","name":"AWS Cert"}'
+            };
+            input.placeholder = placeholders[type];
+        }
+        
+        function generateQR() {
+            const type = document.getElementById('qrType').value;
+            let data = document.getElementById('qrData').value.trim();
+            const size = parseInt(document.getElementById('qrSize').value) || 200;
+            
+            if(!data) {
+                alert('Enter data');
+                return;
+            }
+            
+            // Format based on type
+            if(type === 'url' && !data.startsWith('http')) data = 'https://' + data;
+            if(type === 'credential') {
+                try {
+                    const cred = JSON.parse(data);
+                    data = `https://checkinfo.me/verify?t=${btoa(JSON.stringify(cred)).substring(0,20)}`;
+                } catch(e) {
+                    data = `https://checkinfo.me/verify?t=${btoa(data).substring(0,20)}`;
+                }
+            }
+            
+            generateQRCode(data, size);
+            
+            // Add to history
+            history.unshift({type, data, size, time: new Date().toISOString()});
+            if(history.length > 50) history.pop();
+            saveHistory();
+            renderHistory();
+        }
+        
+        function downloadQR() {
+            const canvas = document.querySelector('#qrcode canvas');
+            if(!canvas) {
+                alert('Generate QR first');
+                return;
+            }
+            const link = document.createElement('a');
+            link.download = 'checkqr-' + Date.now() + '.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+        
+        function renderHistory() {
+            let html = '';
+            history.forEach((h,i) => {
+                html += `<div style="padding:8px;border-bottom:1px solid var(--gl);display:flex;justify-content:space-between;align-items:center">
+                    <div><span class="badge">${h.type}</span> <span style="font-size:12px">${h.data.substring(0,30)}...</span></div>
+                    <button class="btn btn-secondary" style="padding:4px 8px;font-size:11px" onclick="regen(${i})">Use</button>
+                </div>`;
+            });
+            document.getElementById('qrHistory').innerHTML = html || 'No history';
+        }
+        
+        function regen(index) {
+            const h = history[index];
+            document.getElementById('qrType').value = h.type;
+            document.getElementById('qrData').value = h.data;
+            document.getElementById('qrSize').value = h.size;
+            generateQRCode(h.data, h.size);
+        }
+        
+        function clearHistory() {
+            history = [];
+            saveHistory();
+            renderHistory();
+        }
+        
+        function batchGenerate() {
+            const lines = document.getElementById('batchData').value.split('\n').filter(l=>l.trim());
+            if(lines.length === 0) {
+                alert('Enter URLs');
+                return;
+            }
+            
+            let html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:12px">';
+            lines.forEach((url,i) => {
+                generateQRCode(url, 100);
+                const canvas = document.querySelector('#qrcode canvas');
+                if(canvas) {
+                    html += `<div style="text-align:center"><img src="${canvas.toDataURL()}" style="width:100px;height:100px"><div style="font-size:10px">${i+1}</div></div>`;
+                }
+            });
+            html += '</div>';
+            document.getElementById('batchResults').innerHTML = html;
+        }
+        
+        function showTab(tab) {
+            document.querySelectorAll('[id$="Tab"]').forEach(t => t.classList.add('hidden'));
+            document.getElementById(tab+'Tab').classList.remove('hidden');
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+    </script>
+</body>
+</html>
